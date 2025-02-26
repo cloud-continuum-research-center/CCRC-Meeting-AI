@@ -1,0 +1,7 @@
+openai==0.28
+langchain
+chromadb
+faiss-cpu
+langchain-community
+tiktoken
+fastembed
