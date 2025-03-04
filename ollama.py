@@ -3,6 +3,8 @@ import time
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+import json
+import re
 
 app = FastAPI()
 
@@ -57,20 +59,24 @@ def query_ollama(prompt, script=""):
 @app.post("/api/positive")
 async def positive_response(query: QueryRequest):
     prompt = "긍정적이고 격려하는 태도로 응답해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마: \n\n"
-    result = query_ollama(prompt, query.script)
-    return JSONResponse(content=result)
+    result = query_ollama(prompt, query.script)  
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
+
 
 @app.post("/api/negative")
 async def negative_response(query: QueryRequest):
     prompt = "현실감 있는 리액션을 해줘. 응원을 하면서도 잘못된 내용이나 객관적인 부가 사실을 더 알려줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
-    result = query_ollama(prompt, query.script)
-    return JSONResponse(content=result)
+    result = query_ollama(prompt, query.script)  
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
 
 @app.post("/api/summary")
 async def summary_response(query: QueryRequest):
     prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 응원하는 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
-    result = query_ollama(prompt, query.script)
-    return JSONResponse(content=result)
+    result = query_ollama(prompt, query.script)  
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
 
 if __name__ == '__main__':
     import uvicorn
