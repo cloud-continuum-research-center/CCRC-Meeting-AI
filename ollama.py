@@ -1,8 +1,14 @@
+import os
 import requests
 import time
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from langchain_community.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+from langchain_core.documents import Document
 import json
 import re
 
@@ -10,6 +16,18 @@ app = FastAPI()
 
 # 사용할 고정 모델
 MODEL_NAME = "llama3.2-korea"
+
+# 벡터DB 저장 위치
+VECTORDB_PATH = "./vector_db"
+
+# 데이터 파일이 저장된 폴더 (회의록 txt 저장 위치)
+DATA_DIR = "./example"  # 실제 경로에 맞게 변경
+
+# 순환할 파일 리스트
+FILE_LIST = ["1", "2", "3"]
+
+# 순서를 기억할 카운터
+file_counter = 0  # 0부터 시작
 
 class QueryRequest(BaseModel):
     script: str  # 스크립트 파라미터
@@ -55,6 +73,41 @@ def query_ollama(prompt, script=""):
         # JSON 파싱 오류 처리
         return {"error": f"Error decoding JSON: {str(e)}"}
 
+# 벡터DB 생성 함수
+def load_documents_and_create_vectorstore():
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
+    documents = []
+
+    for filename in os.listdir(DATA_DIR):
+        if filename.endswith(".txt"):
+            with open(os.path.join(DATA_DIR, filename), encoding="utf-8") as f:
+                file_text = f.read()
+                chunks = text_splitter.split_text(file_text)
+                for chunk in chunks:
+                    documents.append(Document(
+                        page_content=chunk,
+                        metadata={"filename": filename}
+                    ))
+
+    vectorstore = FAISS.from_documents(documents, embedding=FastEmbedEmbeddings())
+    vectorstore.save_local(VECTORDB_PATH)
+    return vectorstore
+
+# 벡터DB 불러오기
+def get_vectorstore():
+    if os.path.exists(VECTORDB_PATH):
+        return FAISS.load_local(VECTORDB_PATH, FastEmbedEmbeddings(), allow_dangerous_deserialization=True)
+    else:
+        return load_documents_and_create_vectorstore()
+
+# 순서대로 파일명 반환 함수 (순환 방식)
+def get_next_filename():
+    global file_counter
+    filename = FILE_LIST[file_counter]
+    file_counter += 1
+    if file_counter >= len(FILE_LIST):
+        file_counter = 0
+    return filename
 
 @app.post("/api/positive")
 async def positive_response(query: QueryRequest):
@@ -79,12 +132,33 @@ async def summary_response(query: QueryRequest):
     return JSONResponse(content={"response": response_text})
 
 @app.post("/api/loader")
-async def summary_response(query: QueryRequest):
-    prompt = "기존 회의록을 기반으로 응답해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
-    result = query_ollama(prompt, query.script)  
+async def loader_response(query: QueryRequest):
+    vectorstore = get_vectorstore()
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+    docs = retriever.get_relevant_documents(query.script)
+
+    # 유사도 검색 결과 기반 문서 내용 합치기
+    context = "\n\n".join([doc.page_content for doc in docs])
+
+    # 순환 방식으로 파일명 선택 (강제 note_id 부여)
+    note_id = get_next_filename()
+
+    prompt = f"""
+    다음은 회의록에서 찾은 관련 내용입니다:{context}
+    참고 문서: {note_id}
+    사용자 질문: {query.script}
+    위 참고 문서를 기반으로 사용자 질문에 대해 정확하고 구체적으로 답변해줘. 또한, 짧고 질문에 대한 핵심적인 내용만 답변해줘.
+    """
+
+    result = query_ollama(prompt)
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
-    return JSONResponse(content={"response": response_text})
+
+    return JSONResponse(content={
+        "note_ids": [note_id],  # 강제로 순환 방식으로 note_id 반환
+        "response": response_text
+    })
+
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="debug")
