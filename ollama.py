@@ -15,7 +15,7 @@ import re
 app = FastAPI()
 
 # 사용할 고정 모델
-MODEL_NAME = "llama3.2-korea"
+MODEL_NAME = "your-ollama-model"
 
 # 벡터DB 저장 위치
 VECTORDB_PATH = "./vector_db"
@@ -109,29 +109,31 @@ def get_next_filename():
         file_counter = 0
     return filename
 
-@app.post("/api/positive")
+@app.post("/api/bot/positive")
 async def positive_response(query: QueryRequest):
     prompt = "긍정적이고 격려하는 태도로 응답해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마: \n\n"
     result = query_ollama(prompt, query.script)  
+    print(f"{result}")
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    print(f"{response_text}")
     return JSONResponse(content={"response": response_text})
 
 
-@app.post("/api/negative")
+@app.post("/api/bot/negative")
 async def negative_response(query: QueryRequest):
     prompt = "현실감 있는 리액션을 해줘. 응원을 하면서도 잘못된 내용이나 객관적인 부가 사실을 더 알려줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
 
-@app.post("/api/summary")
+@app.post("/api/bot/summary")
 async def summary_response(query: QueryRequest):
     prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 응원하는 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
 
-@app.post("/api/loader")
+@app.post("/api/bot/loader")
 async def loader_response(query: QueryRequest):
     vectorstore = get_vectorstore()
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
@@ -161,4 +163,4 @@ async def loader_response(query: QueryRequest):
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="debug")
+    uvicorn.run(app, host="127.0.0.1", port=8080, log_level="debug")
