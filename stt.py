@@ -11,6 +11,8 @@ from mysql import get_db
 
 app = FastAPI()
 
+load_dotenv() 
+
 # STT 모델 로드
 model = whisper.load_model("turbo")
 
@@ -31,12 +33,14 @@ class Bot(Base):
     content = Column(String, nullable=True)
     created_at = Column(TIMESTAMP(6), server_default=func.now())
 
+LLM_IP = os.getenv("LLM_IP")
+
 # LLM 서버 API URL
 LLM_API_URLS = {
-    "POSITIVE": "http://127.0.0.1:8080/api/bot/positive",
-    "NEGATIVE": "http://127.0.0.1:8080/api/bot/negative",
-    "SUMMARY": "http://127.0.0.1:8080/api/bot/summary",
-    "LOADER": "http://127.0.0.1:8080/api/bot/loader"
+    "POSITIVE": f"{LLM_IP}/api/bot/positive",
+    "NEGATIVE": f"{LLM_IP}/api/bot/negative",
+    "SUMMARY": f"{LLM_IP}/api/bot/summary",
+    "LOADER": f"{LLM_IP}/api/bot/loader",
 }
 
 # LLM 서버에 STT 결과 전달하는 함수

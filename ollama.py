@@ -15,11 +15,13 @@ import re
 
 app = FastAPI()
 
+load_dotenv() 
+
 # 사용할 고정 모델
 MODEL_NAME = os.getenv("MODEL_NAME")
 
 # 벡터DB 저장 위치
-VECTORDB_PATH = "./vector_db"
+VECTORDB_PATH = os.getenv("VECTORDB_URL")
 
 # 데이터 파일이 저장된 폴더 (회의록 txt 저장 위치)
 DATA_DIR = "./example"  # 실제 경로에 맞게 변경
@@ -33,9 +35,10 @@ file_counter = 0  # 0부터 시작
 class QueryRequest(BaseModel):
     script: str  # 스크립트 파라미터
 
+OLLAMA_IP = os.getenv("OLLAMA_IP")
 
 def query_ollama(prompt, script=""):
-    url = "http://127.0.0.1:11434/api/generate"  # Ollama API 엔드포인트 (로컬 서버)
+    url = f"{OLLAMA_IP}/api/generate"  # Ollama API 엔드포인트 (로컬 서버)
     headers = {
         "Content-Type": "application/json"
     }

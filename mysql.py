@@ -3,6 +3,8 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
 
+load_dotenv() 
+
 # MySQL 데이터베이스 설정
 DATABASE_URL = os.getenv("DATABASE_URL")
 
