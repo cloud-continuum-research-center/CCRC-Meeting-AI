@@ -8,3 +8,5 @@ fastembed
 pymysql
 uvicorn
 openai-whisper
+python-multipart
+ffmpeg
