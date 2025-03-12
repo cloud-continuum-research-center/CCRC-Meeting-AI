@@ -3,6 +3,7 @@ import shutil
 import whisper
 import os
 import requests
+import time
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, Integer, String, TIMESTAMP, func
@@ -71,7 +72,12 @@ async def transcribe_positive(
     db.commit()
     db.refresh(new_bot_entry)
     
+    start_time = time.time() #stt 시작 시간
     result = model.transcribe(file_path)
+    end_time = time.time() #stt 종료 시간
+    processing_time = end_time - start_time #걸린 시간
+    print(f"Request time: {processing_time} seconds")
+    
     text = result["text"]
     
     llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text)
@@ -102,7 +108,12 @@ async def transcribe_negative(
     db.commit()
     db.refresh(new_bot_entry)
     
+    start_time = time.time() #stt 시작 시간
     result = model.transcribe(file_path)
+    end_time = time.time() #stt 종료 시간
+    processing_time = end_time - start_time #걸린 시간
+    print(f"Request time: {processing_time} seconds")
+    
     text = result["text"]
     
     llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text)
@@ -133,7 +144,12 @@ async def transcribe_summary(
     db.commit()
     db.refresh(new_bot_entry)
     
+    start_time = time.time() #stt 시작 시간
     result = model.transcribe(file_path)
+    end_time = time.time() #stt 종료 시간
+    processing_time = end_time - start_time #걸린 시간
+    print(f"Request time: {processing_time} seconds")
+    
     text = result["text"]
     
     llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text)
@@ -164,7 +180,12 @@ async def transcribe_loader(
     db.commit()
     db.refresh(new_bot_entry)
     
+    start_time = time.time() #stt 시작 시간
     result = model.transcribe(file_path)
+    end_time = time.time() #stt 종료 시간
+    processing_time = end_time - start_time #걸린 시간
+    print(f"Request time: {processing_time} seconds")
+    
     text = result["text"]
     
     llm_response = send_to_llm(LLM_API_URLS["LOADER"], text)
