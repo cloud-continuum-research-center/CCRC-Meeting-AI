@@ -3,6 +3,7 @@ import shutil
 import whisper
 import os
 import requests
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, Integer, String, TIMESTAMP, func
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,8 +15,8 @@ app = FastAPI()
 model = whisper.load_model("turbo")
 
 # 디렉토리 설정
-INPUT_DIR = "path to save input mp3 file"
-OUTPUT_DIR = "path to save output stt text"
+INPUT_DIR = os.getenv("INPUT_DIR")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR")
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

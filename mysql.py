@@ -1,8 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+import os
 
 # MySQL 데이터베이스 설정
-DATABASE_URL = "my sql url" #modify your my sql url
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # 데이터베이스 연결 엔진 생성
 engine = create_engine(DATABASE_URL)

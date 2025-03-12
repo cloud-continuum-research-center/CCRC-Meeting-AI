@@ -2,6 +2,7 @@ import os
 import requests
 import time
 from fastapi import FastAPI
+from dotenv import load_dotenv
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from langchain_community.document_loaders import TextLoader
@@ -15,7 +16,7 @@ import re
 app = FastAPI()
 
 # 사용할 고정 모델
-MODEL_NAME = "your-ollama-model"
+MODEL_NAME = os.getenv("MODEL_NAME")
 
 # 벡터DB 저장 위치
 VECTORDB_PATH = "./vector_db"
