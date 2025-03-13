@@ -248,37 +248,30 @@ async def end_meeting(
     db: Session = Depends(get_db)
 ):
 
-    # 📌 1️⃣ 파일 저장 (mp3)
+    # 파일 저장 (mp3)
     file_path = os.path.join(INPUT_DIR, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # 📌 2️⃣ userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
+    # userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
     user_ids = db.query(UserMeeting.user_id).filter(UserMeeting.meeting_id == meeting_id).all()
     user_ids = [user_id[0] for user_id in user_ids]
 
-    # 📌 3️⃣ users 테이블에서 nickname 조회하여 members 필드에 저장
+    # users 테이블에서 nickname 조회하여 members 필드에 저장
     nicknames = db.query(User.nickname).filter(User.user_id.in_(user_ids)).all()
     members = ", ".join([nickname[0] for nickname in nicknames])
 
-    print(f"📌 members 값: {members}")
-
-    # 📌 4️⃣ STT 변환 수행 (script 저장)
+    # STT 변환 수행 (script 저장)
     result = model.transcribe(file_path)
     text = result["text"]
 
-    print(f"📌 STT 변환 완료. script 내용: {text[:50]}...")  # 일부만 출력
-
-    # 📌 5️⃣ Ollama로 요약 요청 (summary 저장)
+    # Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text)
 
-    print(f"📌 Ollama 요약 완료. summary 내용: {llm_response[:50]}...")  # 일부만 출력
-
-    # 📌 6️⃣ 현재 날짜 (YYYY-MM-DD 형식)
+    # 현재 날짜 (YYYY-MM-DD 형식)
     current_date = datetime.now().strftime("%Y-%m-%d")
-    print(f"📌 저장할 title 값: {current_date}")
 
-    # 📌 7️⃣ note 테이블에 데이터 추가
+    # note 테이블에 데이터 추가
     new_note = Note(
         created_at=func.now(),
         updated_at=func.now(),
@@ -293,5 +286,4 @@ async def end_meeting(
     db.add(new_note)
     db.commit()
 
-    print("📌 DB 저장 완료!")
-    return  # 🚀 응답 필요 없음 (DB 저장만 수행)
+    return  # 응답 필요 없음 (DB 저장만 수행)
