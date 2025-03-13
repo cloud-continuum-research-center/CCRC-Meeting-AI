@@ -258,42 +258,62 @@ async def end_meeting(
     db: Session = Depends(get_db)
 ):
 
-    # 파일 저장 (mp3)
+    #  파일 저장 (mp3)
     file_path = os.path.join(INPUT_DIR, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
+    #  userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
     user_ids = db.query(UserMeeting.user_id).filter(UserMeeting.meeting_id == meeting_id).all()
     user_ids = [user_id[0] for user_id in user_ids]
 
-    # users 테이블에서 nickname 조회하여 members 필드에 저장
+    #  users 테이블에서 nickname 조회하여 members 필드에 저장
     nicknames = db.query(User.nickname).filter(User.user_id.in_(user_ids)).all()
     members = ", ".join([nickname[0] for nickname in nicknames])
 
-    # STT 변환 수행 (script 저장)
+    #  STT 변환 수행 (script 저장)
     result = model.transcribe(file_path)
     text = result["text"]
 
-    # Ollama로 요약 요청 (summary 저장)
+    #  Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text)
 
-    # 현재 날짜 (YYYY-MM-DD 형식)
+    print(f"LLM 응답: {llm_response}...")  # 처음 100자만 출력
+
+    #  현재 날짜 (YYYY-MM-DD 형식)
     current_date = datetime.now().strftime("%Y-%m-%d")
 
-    # note 테이블에 데이터 추가
+    #  note 테이블에 데이터 추가
     new_note = Note(
         created_at=func.now(),
         updated_at=func.now(),
         members=members,
-        audio_url=file_path,   # MP3 파일 저장 경로
-        script=text,    # 원본 STT 결과
-        summary=llm_response,  # 요약 결과
-        title=current_date,    # YYYY-MM-DD 형식 날짜
-        meeting_id=meeting_id  # 프론트에서 받은 meeting_id 그대로 저장
+        audio_url=file_path,
+        script=text,
+        summary=llm_response,
+        title=current_date,
+        meeting_id=meeting_id
     )
-
     db.add(new_note)
+
+    #  meetings 테이블 업데이트 (ended_at & duration 추가)
+    meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
+    
+    if meeting:
+        ended_at = datetime.now()  # 현재 시간 저장
+        meeting.ended_at = ended_at
+
+        if meeting.started_at:
+            if ended_at < meeting.started_at:
+                meeting.duration = 0  # 잘못된 경우 0 설정
+            else:
+                duration_seconds = (ended_at - meeting.started_at).total_seconds()
+                duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
+                meeting.duration = duration_minutes
+        else:
+            meeting.duration = 0  # started_at이 없으면 0
+
+
     db.commit()
 
-    return  # 응답 필요 없음 (DB 저장만 수행)
+    return 
