@@ -76,6 +76,16 @@ class User(Base):
     password = Column(String(255), nullable=False)
     profile = Column(String(2048), nullable=True)
 
+# meetings 테이블 엔티티 추가
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    meeting_id = Column(Integer, primary_key=True, autoincrement=True)
+    duration = Column(Integer, nullable=True)  # NULL 가능
+    ended_at = Column(TIMESTAMP(6), nullable=True)
+    started_at = Column(TIMESTAMP(6), nullable=False)
+    title = Column(String(255), nullable=True)
+    team_id = Column(Integer, nullable=False)
 
     
 
