@@ -113,6 +113,43 @@ def get_next_filename():
         file_counter = 0
     return filename
 
+@app.post("/api/bot/endmeeting")
+async def positive_response(query: QueryRequest):
+    prompt = """
+    주어진 스크립트 내용을 기반으로 형식화된 회의록을 생성해줘.
+    
+    형식은 다음과 같아야 해:
+    
+    ---
+    ### 회의록: 자동 생성된 제목
+    
+    #### 목차
+    1. 개요
+    2. 주요 논의 사항
+       1. 첫 번째 논의 내용
+       2. 두 번째 논의 내용
+       3. …
+    3. 다음 단계
+    
+    #### 개요
+    회의의 주요 내용을 간략히 요약해줘.
+    
+    ### 1. 주요 논의 사항
+    
+    - **주요 토픽 1**: 해당 내용을 간략히 정리
+    - **주요 토픽 2**: 해당 내용을 간략히 정리
+    - …
+    
+    ### 2. 다음 단계
+    - 이 회의 이후 필요한 액션 플랜 정리
+    ---
+
+    스크립트 내용을 빠뜨리지말고 위와 같은 형태에 맞게 핵심적으로 잘 구성해줘:\n\n
+    """
+    result = query_ollama(prompt, query.script)  
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
+
 @app.post("/api/bot/positive")
 async def positive_response(query: QueryRequest):
     prompt = "긍정적이고 격려하는 태도로 응답해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마: \n\n"
