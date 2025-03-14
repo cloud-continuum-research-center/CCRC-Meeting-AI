@@ -10,8 +10,19 @@ from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey, Text, fun
 from sqlalchemy.ext.declarative import declarative_base
 from mysql import get_db
 from datetime import datetime
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 도메인에서 요청 허용
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 HTTP 메서드 허용 (GET, POST, PUT, DELETE 등)
+    allow_headers=["*"],  # 모든 헤더 허용
+)
 
 load_dotenv() 
 
