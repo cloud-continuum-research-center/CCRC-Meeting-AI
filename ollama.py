@@ -94,15 +94,31 @@ def query_ollama(prompt, script=""):
         return {"error": f"Error decoding JSON: {str(e)}"}
     
 # 벡터DB를 강제로 초기화하고 scripts만 저장
-def load_scripts_to_vectorstore(scripts):
+def update_vectorstore(scripts):
+    # 벡터DB가 존재하면 로드, 없으면 새로 생성
     if os.path.exists(VECTORDB_PATH):
-        shutil.rmtree(VECTORDB_PATH)  # 기존 벡터DB 삭제
+        print("[FAISS] 기존 벡터DB 로드 중...")
+        vectorstore = FAISS.load_local(VECTORDB_PATH, FastEmbedEmbeddings(), allow_dangerous_deserialization=True)
+    else:
+        print("[FAISS] 새로운 벡터DB 생성 중...")
+        vectorstore = None
 
+    # 새로 들어온 scripts를 벡터화
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
-    documents = [Document(page_content=chunk) for script in scripts for chunk in text_splitter.split_text(script)]
+    new_documents = [Document(page_content=chunk) for script in scripts for chunk in text_splitter.split_text(script)]
 
-    vectorstore = FAISS.from_documents(documents, embedding=FastEmbedEmbeddings())
+    # 벡터DB가 있으면 기존 데이터에 추가, 없으면 새로 생성
+    if vectorstore:
+        print("[FAISS] 기존 벡터DB에 새 문서 추가 중...")
+        vectorstore.add_documents(new_documents)  # 기존 벡터DB에 새로운 문서 추가
+    else:
+        print("[FAISS] 새로운 벡터DB 생성 중...")
+        vectorstore = FAISS.from_documents(new_documents, embedding=FastEmbedEmbeddings())
+
+    # 변경된 벡터DB 저장
     vectorstore.save_local(VECTORDB_PATH)
+    print("[FAISS] 벡터DB 업데이트 완료!")
+
     return vectorstore
 
 # 벡터DB 불러오기 (이제 scripts만 처리)
@@ -110,7 +126,7 @@ def get_vectorstore(scripts):
     if os.path.exists(VECTORDB_PATH):
         return FAISS.load_local(VECTORDB_PATH, FastEmbedEmbeddings(), allow_dangerous_deserialization=True)
     else:
-        return load_scripts_to_vectorstore(scripts)
+        return update_vectorstore(scripts)
     
 # Ollama에게 질의하는 함수 (stt_text + similar_context 포함)
 def query_ollama_loader(stt_text, similar_context):
@@ -230,9 +246,10 @@ async def summary_response(query: QueryRequest):
 @app.post("/api/bot/loader")
 async def loader_response(query: LoaderRequest):
     print("[API] /api/bot/loader 호출됨")
+    start_time = time.time()
 
     # 벡터DB 생성 (기존 데이터 삭제 후 scripts만 벡터화)
-    vectorstore = load_scripts_to_vectorstore(query.scripts)
+    vectorstore = update_vectorstore(query.scripts)
 
     # STT 결과를 벡터DB에서 검색
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
@@ -244,6 +261,7 @@ async def loader_response(query: LoaderRequest):
     # 디버깅 로그 추가
     print(f"[OLLAMA] Received stt_text={query.stt_text[:100]}")
     print(f"[OLLAMA] Found similar context: {similar_context[:300]}")  # 300자까지만 출력
+    print(f"vectorDB 처리 시간: {time.time() - start_time:.2f}초")
 
     # LLM에게 질의 수행
     llm_response = query_ollama_loader(query.stt_text, similar_context)
