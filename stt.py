@@ -119,6 +119,13 @@ def send_to_llm(llm_url, text):
     response = requests.post(llm_url, json=payload, headers=headers)
     return response.json().get("response", "응답을 가져올 수 없습니다.")
 
+# RAG(LOADER) 전용 LLM 서버 요청 함수 (stt_text + scripts 리스트 전송)
+def send_to_llm_loader(llm_url, stt_text, scripts):
+    payload = {"stt_text": stt_text, "scripts": scripts}
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(llm_url, json=payload, headers=headers)
+    return response.json().get("response", "응답을 가져올 수 없습니다.")
+
 @app.post("/api/positive")
 async def transcribe_positive(
     file: UploadFile = File(...),
@@ -233,35 +240,44 @@ async def transcribe_loader(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
+    # 파일 저장
     file_path = os.path.join(INPUT_DIR, file.filename)
-    
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
-    new_bot_entry = Bot(
-        meeting_id=meeting_id,
-        type="LOADER",
-        content="요약중",
-        created_at=func.now()
-    )
+
+    # bot 테이블에 기록
+    new_bot_entry = Bot(meeting_id=meeting_id, type="LOADER", content="분석중...", created_at=func.now())
     db.add(new_bot_entry)
     db.commit()
     db.refresh(new_bot_entry)
-    
-    start_time = time.time() #stt 시작 시간
+
+    # STT 변환 수행
+    start_time = time.time()
     result = model.transcribe(file_path)
-    end_time = time.time() #stt 종료 시간
-    processing_time = end_time - start_time #걸린 시간
-    print(f"Request time: {processing_time} seconds")
-    
-    text = result["text"]
-    
-    llm_response = send_to_llm(LLM_API_URLS["LOADER"], text)
-    
+    stt_text = result["text"]
+    print(f"STT 처리 시간: {time.time() - start_time:.2f}초")
+
+    # meetingId로 teamId 조회
+    meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
+    if not meeting:
+        return {"error": "Meeting not found"}
+
+    team_id = meeting.team_id
+
+    # teamId에 매칭되는 noteId 및 script 조회
+    notes = db.query(Note).filter(Note.team_id == team_id).all()
+    note_ids = [note.note_id for note in notes]
+    scripts = [note.script for note in notes]
+
+    # RAG 수행을 위한 새로운 send_to_llm_loader 사용
+    print(f"[STT] Sending to LLM: stt_text={stt_text[:100]}, scripts={scripts[:2]}")  # 로그 추가
+    llm_response = send_to_llm_loader(LLM_API_URLS["LOADER"], stt_text, scripts)
+
+    # bot 테이블에 LLM 응답 저장
     new_bot_entry.content = llm_response
     db.commit()
 
-    return {"transcription": text, "llm_response": llm_response}
+    return {"note_ids": note_ids, "response": llm_response}
 
 @app.post("/api/v1/endmeeting")
 async def end_meeting(

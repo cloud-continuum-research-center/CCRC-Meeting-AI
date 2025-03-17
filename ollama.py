@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import re
+import shutil
 
 app = FastAPI()
 
@@ -47,6 +48,10 @@ class QueryRequest(BaseModel):
     script: str  # 스크립트 파라미터
 
 OLLAMA_IP = os.getenv("OLLAMA_IP")
+
+class LoaderRequest(BaseModel):
+    stt_text: str
+    scripts: list
 
 def query_ollama(prompt, script=""):
     url = f"{OLLAMA_IP}/api/generate"  # Ollama API 엔드포인트 (로컬 서버)
@@ -87,33 +92,62 @@ def query_ollama(prompt, script=""):
     except ValueError as e:
         # JSON 파싱 오류 처리
         return {"error": f"Error decoding JSON: {str(e)}"}
+    
+# 벡터DB를 강제로 초기화하고 scripts만 저장
+def load_scripts_to_vectorstore(scripts):
+    if os.path.exists(VECTORDB_PATH):
+        shutil.rmtree(VECTORDB_PATH)  # 기존 벡터DB 삭제
 
-# 벡터DB 생성 함수
-def load_documents_and_create_vectorstore():
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
-    documents = []
-
-    for filename in os.listdir(DATA_DIR):
-        if filename.endswith(".txt"):
-            with open(os.path.join(DATA_DIR, filename), encoding="utf-8") as f:
-                file_text = f.read()
-                chunks = text_splitter.split_text(file_text)
-                for chunk in chunks:
-                    documents.append(Document(
-                        page_content=chunk,
-                        metadata={"filename": filename}
-                    ))
+    documents = [Document(page_content=chunk) for script in scripts for chunk in text_splitter.split_text(script)]
 
     vectorstore = FAISS.from_documents(documents, embedding=FastEmbedEmbeddings())
     vectorstore.save_local(VECTORDB_PATH)
     return vectorstore
 
-# 벡터DB 불러오기
-def get_vectorstore():
+# 벡터DB 불러오기 (이제 scripts만 처리)
+def get_vectorstore(scripts):
     if os.path.exists(VECTORDB_PATH):
         return FAISS.load_local(VECTORDB_PATH, FastEmbedEmbeddings(), allow_dangerous_deserialization=True)
     else:
-        return load_documents_and_create_vectorstore()
+        return load_scripts_to_vectorstore(scripts)
+    
+# Ollama에게 질의하는 함수 (stt_text + similar_context 포함)
+def query_ollama_loader(stt_text, similar_context):
+    url = f"{OLLAMA_IP}/api/generate"
+    headers = {"Content-Type": "application/json"}
+
+    # 프롬프트 수정: 이전 회의 내용을 참고하여 한 줄 피드백 제공
+    prompt = f"""
+    현재 회의 내용:
+    "{stt_text}"
+
+    이전 회의에서 유사한 논의가 있었습니다:
+    "{similar_context}"
+
+    이전 회의 내용을 참고하여 현재 회의에 대한 짧고 명확한 피드백을 제공해주세요.  
+    반드시 한 문장으로 요약하며, 핵심적인 인사이트만 전달하세요.
+
+    예시 출력:
+    "이전 회의에서는 X에 대한 논의가 있었으니, Y 방향으로 진행하면 더욱 효과적일 것 같습니다."
+    """
+
+    data = {"prompt": prompt, "model": MODEL_NAME, "stream": False}
+
+    try:
+        print(f"[OLLAMA] Sending to LLM: {data}")  # 요청 로그 추가
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        response_data = response.json()
+        print(f"[OLLAMA] LLM Raw Response: {response_data}")  # 응답 로그 추가
+
+        return response_data.get("response", "응답을 가져올 수 없습니다.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"[OLLAMA] LLM Request Error: {e}")
+        return {"error": str(e)}
+
+
 
 # 순서대로 파일명 반환 함수 (순환 방식)
 def get_next_filename():
@@ -194,31 +228,29 @@ async def summary_response(query: QueryRequest):
     return JSONResponse(content={"response": response_text})
 
 @app.post("/api/bot/loader")
-async def loader_response(query: QueryRequest):
-    vectorstore = get_vectorstore()
+async def loader_response(query: LoaderRequest):
+    print("[API] /api/bot/loader 호출됨")
+
+    # 벡터DB 생성 (기존 데이터 삭제 후 scripts만 벡터화)
+    vectorstore = load_scripts_to_vectorstore(query.scripts)
+
+    # STT 결과를 벡터DB에서 검색
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-    docs = retriever.get_relevant_documents(query.script)
+    docs = retriever.get_relevant_documents(query.stt_text)
 
-    # 유사도 검색 결과 기반 문서 내용 합치기
-    context = "\n\n".join([doc.page_content for doc in docs])
+    # 유사한 회의 내용 추출
+    similar_context = "\n\n".join([doc.page_content for doc in docs])
 
-    # 순환 방식으로 파일명 선택 (강제 note_id 부여)
-    note_id = get_next_filename()
+    # 디버깅 로그 추가
+    print(f"[OLLAMA] Received stt_text={query.stt_text[:100]}")
+    print(f"[OLLAMA] Found similar context: {similar_context[:300]}")  # 300자까지만 출력
 
-    prompt = f"""
-    다음은 회의록에서 찾은 관련 내용입니다:{context}
-    참고 문서: {note_id}
-    사용자 질문: {query.script}
-    위 참고 문서를 기반으로 사용자 질문에 대해 정확하고 구체적으로 답변해줘. 또한, 짧고 질문에 대한 핵심적인 내용만 답변해줘.
-    """
+    # LLM에게 질의 수행
+    llm_response = query_ollama_loader(query.stt_text, similar_context)
 
-    result = query_ollama(prompt)
-    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    print(f"[OLLAMA] LLM Response: {llm_response[:300]}")  # 응답 로그 추가
 
-    return JSONResponse(content={
-        "note_ids": [note_id],  # 강제로 순환 방식으로 note_id 반환
-        "response": response_text
-    })
+    return JSONResponse(content={"response": llm_response})
 
 
 if __name__ == '__main__':
