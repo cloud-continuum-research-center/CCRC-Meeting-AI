@@ -74,6 +74,7 @@ class Note(Base):
     summary = Column(Text, nullable=True)
     title = Column(String(255), nullable=True)
     meeting_id = Column(Integer, ForeignKey("user_meetings.meeting_id"), nullable=False)
+    team_id = Column(Integer, ForeignKey("meetings.team_id"), nullable=False) 
 
 # users 테이블 엔티티
 class User(Base):
@@ -269,32 +270,39 @@ async def end_meeting(
     db: Session = Depends(get_db)
 ):
 
-    #  파일 저장 (mp3)
+    # 파일 저장 (MP3)
     file_path = os.path.join(INPUT_DIR, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    #  userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
+    # userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
     user_ids = db.query(UserMeeting.user_id).filter(UserMeeting.meeting_id == meeting_id).all()
     user_ids = [user_id[0] for user_id in user_ids]
 
-    #  users 테이블에서 nickname 조회하여 members 필드에 저장
+    # users 테이블에서 nickname 조회하여 members 필드에 저장
     nicknames = db.query(User.nickname).filter(User.user_id.in_(user_ids)).all()
     members = ", ".join([nickname[0] for nickname in nicknames])
 
-    #  STT 변환 수행 (script 저장)
+    # meetings 테이블에서 team_id 조회
+    meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
+    if not meeting:
+        return {"error": "Meeting not found"}
+
+    team_id = meeting.team_id  # team_id 값 저장
+
+    # STT 변환 수행 (script 저장)
     result = model.transcribe(file_path)
     text = result["text"]
 
-    #  Ollama로 요약 요청 (summary 저장)
+    # Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text)
 
-    print(f"LLM 응답: {llm_response}...")  # 처음 100자만 출력
+    print(f"LLM 응답: {llm_response}...")  # 처음 100자만 출력하여 확인
 
-    #  현재 날짜 (YYYY-MM-DD 형식)
+    # 현재 날짜 (YYYY-MM-DD 형식)
     current_date = datetime.now().strftime("%Y-%m-%d")
 
-    #  note 테이블에 데이터 추가
+    # note 테이블에 데이터 추가 (team_id 포함)
     new_note = Note(
         created_at=func.now(),
         updated_at=func.now(),
@@ -303,28 +311,25 @@ async def end_meeting(
         script=text,
         summary=llm_response,
         title=current_date,
-        meeting_id=meeting_id
+        meeting_id=meeting_id,
+        team_id=team_id  # team_id 추가
     )
     db.add(new_note)
 
-    #  meetings 테이블 업데이트 (ended_at & duration 추가)
-    meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
-    
-    if meeting:
-        ended_at = datetime.now()  # 현재 시간 저장
-        meeting.ended_at = ended_at
+    # meetings 테이블 업데이트 (ended_at & duration 추가)
+    ended_at = datetime.now()
+    meeting.ended_at = ended_at
 
-        if meeting.started_at:
-            if ended_at < meeting.started_at:
-                meeting.duration = 0  # 잘못된 경우 0 설정
-            else:
-                duration_seconds = (ended_at - meeting.started_at).total_seconds()
-                duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
-                meeting.duration = duration_minutes
+    if meeting.started_at:
+        if ended_at < meeting.started_at:
+            meeting.duration = 0  # 잘못된 경우 0 설정
         else:
-            meeting.duration = 0  # started_at이 없으면 0
-
+            duration_seconds = (ended_at - meeting.started_at).total_seconds()
+            duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
+            meeting.duration = duration_minutes
+    else:
+        meeting.duration = 0  # started_at이 없으면 0
 
     db.commit()
 
-    return 
+    return
