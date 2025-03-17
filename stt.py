@@ -277,7 +277,7 @@ async def transcribe_loader(
     new_bot_entry.content = llm_response
     db.commit()
 
-    return {"note_ids": note_ids, "response": llm_response}
+    return {"note_ids": note_ids[0], "response": llm_response}
 
 @app.post("/api/v1/endmeeting")
 async def end_meeting(
