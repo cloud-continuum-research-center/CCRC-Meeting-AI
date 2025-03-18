@@ -12,11 +12,30 @@ from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.documents import Document
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import stomp
 import json
 import re
 import shutil
 
 app = FastAPI()
+
+class StompListener(stomp.ConnectionListener):
+    def on_error(self, frame):
+        print('Received an error:', frame.body)
+    def on_connected(self, headers):
+        print('Connected to STOMP server')
+
+def send_summary(meeting_id, summary):
+    conn = stomp.Connection([("localhost", 10000)])  # STOMP 브로커 주소
+    conn.set_listener("", StompListener())
+    conn.connect(wait=True)
+
+    message = json.dumps({"meetingId": meeting_id, "response": summary})
+
+    # WebSocket의 /topic/meeting/participants 구독자에게 전송
+    conn.send(destination="/topic/meeting/participants", body=message, headers={'content-type': 'application/json'})
+    
+    conn.disconnect()
 
 # CORS 설정
 app.add_middleware(
@@ -241,6 +260,9 @@ async def summary_response(query: QueryRequest):
     prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 응원하는 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    
+    send_summary(query.meetingId, response_text)
+
     return JSONResponse(content={"response": response_text})
 
 @app.post("/api/bot/loader")
