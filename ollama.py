@@ -25,17 +25,20 @@ class StompListener(stomp.ConnectionListener):
     def on_connected(self, headers):
         print('Connected to STOMP server')
 
-def send_summary(meeting_id, summary):
-    conn = stomp.Connection([("localhost", 10000)])  # STOMP 브로커 주소
-    conn.set_listener("", StompListener())
-    conn.connect(wait=True)
+async def send_summary(meeting_id, summary):
+    uri = ""
 
-    message = json.dumps({"meetingId": meeting_id, "response": summary})
+    try:
+        async with websockets.connect(uri) as websocket:
+            message = json.dumps({
+                "meetingId": meeting_id,
+                "response": summary
+            })
+            await websocket.send(message)
+            print("STOMP 메시지 전송 완료 (WebSocket)")
 
-    # WebSocket의 /topic/meeting/participants 구독자에게 전송
-    conn.send(destination="/topic/meeting/participants", body=message, headers={'content-type': 'application/json'})
-    
-    conn.disconnect()
+    except Exception as e:
+        print(f"STOMP WebSocket 연결 실패: {e}")
 
 # CORS 설정
 app.add_middleware(
