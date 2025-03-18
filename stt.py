@@ -155,7 +155,6 @@ async def transcribe_positive(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
-    meeting_id = result["meeting_id"]
 
     llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text, meeting_id)
     
@@ -192,7 +191,6 @@ async def transcribe_negative(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
-    meeting_id = result["meeting_id"]
     
     llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text, meeting_id)
     
@@ -229,7 +227,6 @@ async def transcribe_summary(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
-    meeting_id = result["meeting_id"]
     
     llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text, meeting_id)
     
@@ -313,7 +310,6 @@ async def end_meeting(
     # STT 변환 수행 (script 저장)
     result = model.transcribe(file_path)
     text = result["text"]
-    meeting_id = result["meeting_id"]
 
     # Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text, meeting_id)
