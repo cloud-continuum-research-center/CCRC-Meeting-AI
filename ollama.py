@@ -64,6 +64,7 @@ FILE_LIST = ["1", "2", "3"]
 file_counter = 0  # 0부터 시작
 
 class QueryRequest(BaseModel):
+    meeting_id: int
     script: str  # 스크립트 파라미터
 
 OLLAMA_IP = os.getenv("OLLAMA_IP")
@@ -261,7 +262,7 @@ async def summary_response(query: QueryRequest):
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     
-    send_summary(query.meetingId, response_text)
+    send_summary(query.meeting_id, response_text)
 
     return JSONResponse(content={"response": response_text})
 

@@ -113,15 +113,16 @@ LLM_API_URLS = {
 }
 
 # LLM 서버에 STT 결과 전달하는 함수
-def send_to_llm(llm_url, text):
-    payload = {"script": text}
+def send_to_llm(llm_url, text, meeting_id):
+    payload = {"script": text,
+               "meeting_id": meeting_id}
     headers = {"Content-Type": "application/json"}
     response = requests.post(llm_url, json=payload, headers=headers)
     return response.json().get("response", "응답을 가져올 수 없습니다.")
 
 # RAG(LOADER) 전용 LLM 서버 요청 함수 (stt_text + scripts 리스트 전송)
-def send_to_llm_loader(llm_url, stt_text, scripts):
-    payload = {"stt_text": stt_text, "scripts": scripts}
+def send_to_llm_loader(llm_url, stt_text, scripts, meeting_id):
+    payload = {"stt_text": stt_text, "scripts": scripts, "meeting_id": meeting_id}
     headers = {"Content-Type": "application/json"}
     response = requests.post(llm_url, json=payload, headers=headers)
     return response.json().get("response", "응답을 가져올 수 없습니다.")
@@ -154,8 +155,9 @@ async def transcribe_positive(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
-    
-    llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text)
+    meeting_id = result["meeting_id"]
+
+    llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text, meeting_id)
     
     new_bot_entry.content = llm_response
     db.commit()
@@ -190,8 +192,9 @@ async def transcribe_negative(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
+    meeting_id = result["meeting_id"]
     
-    llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text)
+    llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text, meeting_id)
     
     new_bot_entry.content = llm_response
     db.commit()
@@ -226,8 +229,9 @@ async def transcribe_summary(
     print(f"Request time: {processing_time} seconds")
     
     text = result["text"]
+    meeting_id = result["meeting_id"]
     
-    llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text)
+    llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text, meeting_id)
     
     new_bot_entry.content = llm_response
     db.commit()
@@ -271,7 +275,7 @@ async def transcribe_loader(
 
     # RAG 수행을 위한 새로운 send_to_llm_loader 사용
     print(f"[STT] Sending to LLM: stt_text={stt_text[:100]}, scripts={scripts[:2]}")  # 로그 추가
-    llm_response = send_to_llm_loader(LLM_API_URLS["LOADER"], stt_text, scripts)
+    llm_response = send_to_llm_loader(LLM_API_URLS["LOADER"], stt_text, scripts, meeting_id)
 
     # bot 테이블에 LLM 응답 저장
     new_bot_entry.content = llm_response
@@ -309,9 +313,10 @@ async def end_meeting(
     # STT 변환 수행 (script 저장)
     result = model.transcribe(file_path)
     text = result["text"]
+    meeting_id = result["meeting_id"]
 
     # Ollama로 요약 요청 (summary 저장)
-    llm_response = send_to_llm(LLM_API_URLS["END"], text)
+    llm_response = send_to_llm(LLM_API_URLS["END"], text, meeting_id)
 
     print(f"LLM 응답: {llm_response}...")  # 처음 100자만 출력하여 확인
 
