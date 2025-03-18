@@ -14,6 +14,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import stomp
 import json
+import websockets
+
 import re
 import shutil
 
@@ -25,8 +27,11 @@ class StompListener(stomp.ConnectionListener):
     def on_connected(self, headers):
         print('Connected to STOMP server')
 
+import json
+import websockets
+
 async def send_summary(meeting_id, summary):
-    uri = ""
+    uri = "ws://your-backend-server.com/ws"  # Spring WebSocket STOMP 엔드포인트
 
     try:
         async with websockets.connect(uri) as websocket:
@@ -265,7 +270,7 @@ async def summary_response(query: QueryRequest):
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     
-    send_summary(query.meeting_id, response_text)
+    await send_summary(query.meeting_id, response_text)
 
     return JSONResponse(content={"response": response_text})
 
