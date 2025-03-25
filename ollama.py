@@ -317,6 +317,49 @@ async def mbti_response(query: QueryRequest):
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
 
+@app.post("/api/bot/saju")
+async def saju_response(query: QueryRequest):
+    print("[API] /api/bot/saju 호출됨")
+
+    # 벡터 DB 생성 또는 로드
+    SAJU_VECTOR_DB_PATH = "./vector_db_saju"
+    SAJU_DATA_PATH = "./saju_data.txt"
+
+    if os.path.exists(SAJU_VECTOR_DB_PATH):
+        vectorstore = FAISS.load_local(SAJU_VECTOR_DB_PATH, FastEmbedEmbeddings(), allow_dangerous_deserialization=True)
+    else:
+        print("[SAJU] 새로운 사주 벡터 DB 생성 중...")
+        loader = TextLoader(SAJU_DATA_PATH)
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
+        split_docs = text_splitter.split_documents(documents)
+        vectorstore = FAISS.from_documents(split_docs, FastEmbedEmbeddings())
+        vectorstore.save_local(SAJU_VECTOR_DB_PATH)
+
+    # RAG로 유사한 내용 추출
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+    docs = retriever.get_relevant_documents(query.script)
+    similar_context = "\n\n".join([doc.page_content for doc in docs])
+
+    # 프롬프트 구성
+    prompt = f"""
+다음은 사용자가 말한 생년월일과 태어난 시간 정보입니다:
+"{query.script}"
+
+그리고 아래는 전통 사주 관련 설명 및 조언 정보입니다:
+"{similar_context}"
+
+이 정보를 바탕으로 사용자의 사주 특성과 운세를 해석해 주세요.  
+가능하면 **현재 운세**, **성향**, **기운**, 그리고 **추천 음식이나 활동**까지 조언을 포함해주세요.
+
+출력 예시:
+"당신은 목(木)의 기운이 강한 편으로, 스트레스에 예민할 수 있습니다. 봄철 기운이 잘 맞으며, 따뜻한 성질의 음식을 섭취하면 좋습니다. 이 시기에는 새로운 일을 시작하기 좋은 운입니다."
+"""
+
+    result = query_ollama(prompt, query.script)
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
+
 
 if __name__ == '__main__':
     import uvicorn
