@@ -112,6 +112,7 @@ LLM_API_URLS = {
     "LOADER": f"{LLM_IP}/api/bot/loader",
     "END": f"{LLM_IP}/api/bot/endmeeting",
     "MBTI": f"{LLM_IP}/api/bot/mbti",
+    "SAJU": f"{LLM_IP}/api/bot/saju",
 }
 
 # LLM 서버에 STT 결과 전달하는 함수
@@ -313,6 +314,35 @@ async def transcribe_mbti(
 
     return {"transcription": stt_text, "llm_response": llm_response}
 
+@app.post("/api/saju")
+async def transcribe_saju(
+    file: UploadFile = File(...),
+    meeting_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    file_path = os.path.join(INPUT_DIR, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    new_bot_entry = Bot(
+        meeting_id=meeting_id,
+        type="SAJU",
+        content="사주 분석중...",
+        created_at=func.now()
+    )
+    db.add(new_bot_entry)
+    db.commit()
+    db.refresh(new_bot_entry)
+
+    result = model.transcribe(file_path)
+    stt_text = result["text"]
+
+    llm_response = send_to_llm(LLM_API_URLS["SAJU"], stt_text, meeting_id)
+
+    new_bot_entry.content = llm_response
+    db.commit()
+
+    return {"transcription": stt_text, "llm_response": llm_response}
 
 @app.post("/api/v1/endmeeting")
 async def end_meeting(
