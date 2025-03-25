@@ -37,7 +37,8 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 Base = declarative_base()
 
-
+MBTI_VECTOR_DB_PATH = os.getenv("MBTI_VECTOR_DB_PATH")
+MBTI_DATA_PATH = "./mbti_data.txt"
 
 
 
@@ -110,6 +111,7 @@ LLM_API_URLS = {
     "SUMMARY": f"{LLM_IP}/api/bot/summary",
     "LOADER": f"{LLM_IP}/api/bot/loader",
     "END": f"{LLM_IP}/api/bot/endmeeting",
+    "MBTI": f"{LLM_IP}/api/bot/mbti",
 }
 
 # LLM 서버에 STT 결과 전달하는 함수
@@ -279,6 +281,38 @@ async def transcribe_loader(
     db.commit()
 
     return {"note_ids": note_ids[0], "response": llm_response}
+
+@app.post("/api/mbti")
+async def transcribe_mbti(
+    file: UploadFile = File(...),
+    meeting_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    file_path = os.path.join(INPUT_DIR, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    new_bot_entry = Bot(
+        meeting_id=meeting_id,
+        type="MBTI",
+        content="MBTI 분석 중...",
+        created_at=func.now()
+    )
+    db.add(new_bot_entry)
+    db.commit()
+    db.refresh(new_bot_entry)
+
+    result = model.transcribe(file_path)
+    stt_text = result["text"]
+
+    # MBTI 분석 요청
+    llm_response = send_to_llm(LLM_API_URLS["MBTI"], stt_text, meeting_id)
+
+    new_bot_entry.content = llm_response
+    db.commit()
+
+    return {"transcription": stt_text, "llm_response": llm_response}
+
 
 @app.post("/api/v1/endmeeting")
 async def end_meeting(
