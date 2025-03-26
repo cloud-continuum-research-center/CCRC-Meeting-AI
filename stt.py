@@ -112,6 +112,7 @@ LLM_API_URLS = {
     "END": f"{LLM_IP}/api/bot/endmeeting",
     "MBTI": f"{LLM_IP}/api/bot/mbti",
     "SAJU": f"{LLM_IP}/api/bot/saju",
+    "MOYA": f"{LLM_IP}/api/bot/moya",
 }
 
 # LLM 서버에 STT 결과 전달하는 함수
@@ -166,6 +167,40 @@ async def transcribe_positive(
     print(f"Request time: {processing_time} seconds")
     
     llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text, meeting_id)
+    
+    new_bot_entry.content = llm_response
+    db.commit()
+    
+    return {"transcription": text, "llm_response": llm_response}
+
+@app.post("/api/moya")
+async def transcribe_positive(
+    file: UploadFile = File(...),
+    meeting_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    file_path = os.path.join(INPUT_DIR, file.filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    new_bot_entry = Bot(
+        meeting_id=meeting_id,
+        type="MOYA",
+        content="대화중",
+        created_at=func.now()
+    )
+    db.add(new_bot_entry)
+    db.commit()
+    db.refresh(new_bot_entry)
+    
+    start_time = time.time() #stt 시작 시간
+    text = whisper_api_transcribe(file_path)
+    end_time = time.time() #stt 종료 시간
+    processing_time = end_time - start_time #걸린 시간
+    print(f"Request time: {processing_time} seconds")
+    
+    llm_response = send_to_llm(LLM_API_URLS["MOYA"], text, meeting_id)
     
     new_bot_entry.content = llm_response
     db.commit()
