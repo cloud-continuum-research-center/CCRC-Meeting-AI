@@ -1,6 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form, Depends
 import shutil
-import whisper
 import os
 import requests
 import time
@@ -10,8 +9,8 @@ from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey, Text, fun
 from sqlalchemy.ext.declarative import declarative_base
 from mysql import get_db
 from datetime import datetime
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import openai
 
 app = FastAPI()
 
@@ -27,7 +26,7 @@ app.add_middleware(
 load_dotenv() 
 
 # STT 모델 로드
-model = whisper.load_model("turbo")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 디렉토리 설정
 INPUT_DIR = os.getenv("INPUT_DIR")
@@ -130,6 +129,15 @@ def send_to_llm_loader(llm_url, stt_text, scripts, meeting_id):
     response = requests.post(llm_url, json=payload, headers=headers)
     return response.json().get("response", "응답을 가져올 수 없습니다.")
 
+def whisper_api_transcribe(file_path):
+    with open(file_path, "rb") as audio_file:
+        response = openai.Audio.transcribe(
+            model="whisper-1",
+            file=audio_file,
+            response_format="json"
+        )
+    return response["text"]
+
 @app.post("/api/positive")
 async def transcribe_positive(
     file: UploadFile = File(...),
@@ -152,13 +160,11 @@ async def transcribe_positive(
     db.refresh(new_bot_entry)
     
     start_time = time.time() #stt 시작 시간
-    result = model.transcribe(file_path)
+    text = whisper_api_transcribe(file_path)
     end_time = time.time() #stt 종료 시간
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
     
-    text = result["text"]
-
     llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -188,13 +194,11 @@ async def transcribe_negative(
     db.refresh(new_bot_entry)
     
     start_time = time.time() #stt 시작 시간
-    result = model.transcribe(file_path)
+    text = whisper_api_transcribe(file_path)
     end_time = time.time() #stt 종료 시간
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
-    
-    text = result["text"]
-    
+        
     llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -224,13 +228,11 @@ async def transcribe_summary(
     db.refresh(new_bot_entry)
     
     start_time = time.time() #stt 시작 시간
-    result = model.transcribe(file_path)
+    text = whisper_api_transcribe(file_path)
     end_time = time.time() #stt 종료 시간
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
-    
-    text = result["text"]
-    
+        
     llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -257,8 +259,7 @@ async def transcribe_loader(
 
     # STT 변환 수행
     start_time = time.time()
-    result = model.transcribe(file_path)
-    stt_text = result["text"]
+    stt_text = whisper_api_transcribe(file_path)
     print(f"STT 처리 시간: {time.time() - start_time:.2f}초")
 
     # meetingId로 teamId 조회
@@ -303,8 +304,7 @@ async def transcribe_mbti(
     db.commit()
     db.refresh(new_bot_entry)
 
-    result = model.transcribe(file_path)
-    stt_text = result["text"]
+    stt_text = whisper_api_transcribe(file_path)
 
     # MBTI 분석 요청
     llm_response = send_to_llm(LLM_API_URLS["MBTI"], stt_text, meeting_id)
@@ -334,8 +334,7 @@ async def transcribe_saju(
     db.commit()
     db.refresh(new_bot_entry)
 
-    result = model.transcribe(file_path)
-    stt_text = result["text"]
+    stt_text = whisper_api_transcribe(file_path)
 
     llm_response = send_to_llm(LLM_API_URLS["SAJU"], stt_text, meeting_id)
 
@@ -372,8 +371,7 @@ async def end_meeting(
     team_id = meeting.team_id  # team_id 값 저장
 
     # STT 변환 수행 (script 저장)
-    result = model.transcribe(file_path)
-    text = result["text"]
+    text = whisper_api_transcribe(file_path)
 
     # Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text, meeting_id)
