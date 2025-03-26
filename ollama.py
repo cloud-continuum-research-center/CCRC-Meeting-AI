@@ -238,6 +238,13 @@ async def negative_response(query: QueryRequest):
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
 
+@app.post("/api/bot/moya")
+async def negative_response(query: QueryRequest):
+    prompt = "이전에 했던 대화내용을 참고해서 흐름에 맞춘 자연스러운 대화를 이어나가주고 한줄로 간결하게 대답해줘:\n\n"
+    result = query_ollama(prompt, query.script)  
+    response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
+    return JSONResponse(content={"response": response_text})
+
 @app.post("/api/bot/summary")
 async def summary_response(query: QueryRequest):
     prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 응원하는 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
