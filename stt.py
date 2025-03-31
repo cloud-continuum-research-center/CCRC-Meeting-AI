@@ -39,7 +39,23 @@ Base = declarative_base()
 MBTI_VECTOR_DB_PATH = os.getenv("MBTI_VECTOR_DB_PATH")
 MBTI_DATA_PATH = "./mbti_data.txt"
 
+def save_file_and_dirs(file: UploadFile, meeting_id: int):
+    input_meeting_dir = os.path.join(INPUT_DIR, str(meeting_id))
+    output_meeting_dir = os.path.join(OUTPUT_DIR, str(meeting_id))
+    os.makedirs(input_meeting_dir, exist_ok=True)
+    os.makedirs(output_meeting_dir, exist_ok=True)
 
+    file_path = os.path.join(input_meeting_dir, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return file_path, output_meeting_dir
+
+def save_transcription(output_dir: str, filename: str, text: str):
+    output_filename = os.path.splitext(filename)[0] + ".txt"
+    output_path = os.path.join(output_dir, output_filename)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(text)
 
 # Bot 테이블 모델 정의
 class Bot(Base):
@@ -145,16 +161,8 @@ async def transcribe_positive(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    # Create input/output dirs for this meeting
-    input_meeting_dir = os.path.join(INPUT_DIR, str(meeting_id))
-    output_meeting_dir = os.path.join(OUTPUT_DIR, str(meeting_id))
-    os.makedirs(input_meeting_dir, exist_ok=True)
-    os.makedirs(output_meeting_dir, exist_ok=True)
-
-    # Save input file
-    file_path = os.path.join(input_meeting_dir, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
 
     # Insert placeholder in DB
     new_bot_entry = Bot(
@@ -173,11 +181,7 @@ async def transcribe_positive(
     end_time = time.time()
     print(f"STT 처리 시간: {end_time - start_time:.2f}초")
 
-    # Save STT result to output/meeting_id/
-    output_filename = os.path.splitext(file.filename)[0] + ".txt"
-    output_path = os.path.join(output_meeting_dir, output_filename)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(text)
+    save_transcription(output_dir, file.filename, text)
 
     # LLM 처리
     llm_response = send_to_llm(LLM_API_URLS["POSITIVE"], text, meeting_id)
@@ -192,10 +196,8 @@ async def transcribe_positive(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
     
     new_bot_entry = Bot(
         meeting_id=meeting_id,
@@ -213,6 +215,8 @@ async def transcribe_positive(
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
     
+    save_transcription(output_dir, file.filename, text)
+
     llm_response = send_to_llm(LLM_API_URLS["MOYA"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -226,10 +230,8 @@ async def transcribe_negative(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
     
     new_bot_entry = Bot(
         meeting_id=meeting_id,
@@ -246,7 +248,9 @@ async def transcribe_negative(
     end_time = time.time() #stt 종료 시간
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
-        
+
+    save_transcription(output_dir, file.filename, text)
+
     llm_response = send_to_llm(LLM_API_URLS["NEGATIVE"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -260,10 +264,8 @@ async def transcribe_summary(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
     
     new_bot_entry = Bot(
         meeting_id=meeting_id,
@@ -281,6 +283,8 @@ async def transcribe_summary(
     processing_time = end_time - start_time #걸린 시간
     print(f"Request time: {processing_time} seconds")
         
+    save_transcription(output_dir, file.filename, text)
+
     llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text, meeting_id)
     
     new_bot_entry.content = llm_response
@@ -295,9 +299,7 @@ async def transcribe_loader(
     db: Session = Depends(get_db)
 ):
     # 파일 저장
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
 
     # bot 테이블에 기록
     new_bot_entry = Bot(meeting_id=meeting_id, type="LOADER", content="분석중...", created_at=func.now())
@@ -309,6 +311,8 @@ async def transcribe_loader(
     start_time = time.time()
     stt_text = whisper_api_transcribe(file_path)
     print(f"STT 처리 시간: {time.time() - start_time:.2f}초")
+
+    save_transcription(output_dir, file.filename, stt_text)
 
     # meetingId로 teamId 조회
     meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
@@ -338,9 +342,8 @@ async def transcribe_mbti(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
 
     new_bot_entry = Bot(
         meeting_id=meeting_id,
@@ -353,6 +356,7 @@ async def transcribe_mbti(
     db.refresh(new_bot_entry)
 
     stt_text = whisper_api_transcribe(file_path)
+    save_transcription(output_dir, file.filename, stt_text)
 
     # MBTI 분석 요청
     llm_response = send_to_llm(LLM_API_URLS["MBTI"], stt_text, meeting_id)
@@ -368,9 +372,8 @@ async def transcribe_saju(
     meeting_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
 
     new_bot_entry = Bot(
         meeting_id=meeting_id,
@@ -383,6 +386,7 @@ async def transcribe_saju(
     db.refresh(new_bot_entry)
 
     stt_text = whisper_api_transcribe(file_path)
+    save_transcription(output_dir, file.filename, stt_text)
 
     llm_response = send_to_llm(LLM_API_URLS["SAJU"], stt_text, meeting_id)
 
@@ -399,9 +403,7 @@ async def end_meeting(
 ):
 
     # 파일 저장 (MP3)
-    file_path = os.path.join(INPUT_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
 
     # userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
     user_ids = db.query(UserMeeting.user_id).filter(UserMeeting.meeting_id == meeting_id).all()
@@ -420,6 +422,7 @@ async def end_meeting(
 
     # STT 변환 수행 (script 저장)
     text = whisper_api_transcribe(file_path)
+    save_transcription(output_dir, file.filename, text)
 
     # Ollama로 요약 요청 (summary 저장)
     llm_response = send_to_llm(LLM_API_URLS["END"], text, meeting_id)
