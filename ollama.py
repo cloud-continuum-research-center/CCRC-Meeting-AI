@@ -247,7 +247,7 @@ async def negative_response(query: QueryRequest):
 
 @app.post("/api/bot/summary")
 async def summary_response(query: QueryRequest):
-    prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 응원하는 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
+    prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 정보 중심으로 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
