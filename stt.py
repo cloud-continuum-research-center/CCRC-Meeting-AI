@@ -285,7 +285,24 @@ async def transcribe_summary(
         
     save_transcription(output_dir, file.filename, text)
 
-    llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], text, meeting_id)
+    # 모든 .txt 병합
+    merged_text = ""
+    print(f"[SUMMARY] 텍스트 병합 시작 - 디렉토리: {output_dir}")
+    for filename in os.listdir(output_dir):
+        if filename.endswith(".txt"):
+            full_path = os.path.join(output_dir, filename)
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    merged_text += content.strip() + "\n\n"
+                    print(f"[SUMMARY] 병합된 파일: {filename} (길이: {len(content)}자)")
+            except Exception as e:
+                print(f"[WARNING] 병합 실패: {filename} - {e}")
+
+    print(f"[SUMMARY] 최종 병합된 텍스트 길이: {len(merged_text)}자")
+    print(f"[SUMMARY] 병합된 전체 텍스트: {merged_text}")
+
+    llm_response = send_to_llm(LLM_API_URLS["SUMMARY"], merged_text.strip(), meeting_id)
     
     new_bot_entry.content = llm_response
     db.commit()
