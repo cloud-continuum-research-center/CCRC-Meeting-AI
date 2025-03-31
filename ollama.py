@@ -247,7 +247,22 @@ async def negative_response(query: QueryRequest):
 
 @app.post("/api/bot/summary")
 async def summary_response(query: QueryRequest):
-    prompt = "스크립트를 보고 요약해줘. 참여자가 더 잘 회의를 이끌어갈 수 있도록 정보 중심으로 말을 해줘. 꼭 한 줄!로 간결하게 대답해 스크립트 내용은 말하지마:\n\n"
+    prompt = """
+    아래는 특정 팀이 이전 회의에서 나온 여러 대화 내용들을 종합한 스크립트입니다.  
+    이 내용을 바탕으로 회의의 핵심 내용을 **한 문장**으로 요약해주세요.
+
+    - 너무 추상적이거나 일반적인 문장은 피해주세요.  
+    - 구체적인 결론, 제안, 인사이트를 포함해서 한 문장으로 전달해주세요.  
+    - 스크립트의 원문 문장을 복사하지 말고, 요약만 해주세요.  
+    - 회의를 들은 사람에게 핵심을 전달한다는 느낌으로 말해주세요.
+
+    회의 스크립트:
+    \"\"\"
+    {query.script}
+    \"\"\"
+
+    회의 요약:
+    """    
     result = query_ollama(prompt, query.script)  
     response_text = result.get("response", "응답을 가져올 수 없습니다.").strip('"')
     return JSONResponse(content={"response": response_text})
