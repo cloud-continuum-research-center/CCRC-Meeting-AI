@@ -493,6 +493,12 @@ async def end_meeting(
 
     global file_counter
 
+    # 이미 해당 meeting_id로 note가 존재하면 중복 생성 방지
+    existing_note = db.query(Note).filter(Note.meeting_id == meeting_id).first()
+    if existing_note:
+        print(f"[ENDTEST] 이미 존재하는 meeting_id: {meeting_id} — note 추가 생략")
+        return {"message": "이미 이 meeting_id에 대한 note가 존재합니다."}
+    
     # 1. 예시 디렉토리 순환
     selected_dir = example_dirs[file_counter]
     file_counter = (file_counter + 1) % len(example_dirs)
