@@ -474,9 +474,9 @@ async def end_meeting(
         if ended_at < meeting.started_at:
             meeting.duration = 0  # 잘못된 경우 0 설정
         else:
-            duration_seconds = (ended_at - meeting.started_at).total_seconds()
-            duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
-            meeting.duration = duration_minutes
+            # 밀리초 단위로 저장
+            duration_milliseconds = int((ended_at - meeting.started_at).total_seconds() * 1000)
+            meeting.duration = duration_milliseconds
     else:
         meeting.duration = 0  # started_at이 없으면 0
 
@@ -562,9 +562,9 @@ async def end_meeting(
         if ended_at < meeting.started_at:
             meeting.duration = 0  # 잘못된 경우 0 설정
         else:
-            duration_seconds = (ended_at - meeting.started_at).total_seconds()
-            duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
-            meeting.duration = duration_minutes
+            # 밀리초 단위로 저장
+            duration_milliseconds = int((ended_at - meeting.started_at).total_seconds() * 1000)
+            meeting.duration = duration_milliseconds
     else:
         meeting.duration = 0  # started_at이 없으면 0
 
