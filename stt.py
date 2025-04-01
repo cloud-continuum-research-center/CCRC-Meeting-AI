@@ -39,6 +39,9 @@ Base = declarative_base()
 MBTI_VECTOR_DB_PATH = os.getenv("MBTI_VECTOR_DB_PATH")
 MBTI_DATA_PATH = "./mbti_data.txt"
 
+example_dirs = ["./example1", "./example2", "./example3"]
+file_counter = 0  # 순서 기억용 전역변수
+
 def save_file_and_dirs(file: UploadFile, meeting_id: int):
     input_meeting_dir = os.path.join(INPUT_DIR, str(meeting_id))
     output_meeting_dir = os.path.join(OUTPUT_DIR, str(meeting_id))
@@ -457,6 +460,88 @@ async def end_meeting(
         audio_url=file_path,
         script=text,
         summary=llm_response,
+        title=current_date,
+        meeting_id=meeting_id,
+        team_id=team_id  # team_id 추가
+    )
+    db.add(new_note)
+
+    # meetings 테이블 업데이트 (ended_at & duration 추가)
+    ended_at = datetime.now()
+    meeting.ended_at = ended_at
+
+    if meeting.started_at:
+        if ended_at < meeting.started_at:
+            meeting.duration = 0  # 잘못된 경우 0 설정
+        else:
+            duration_seconds = (ended_at - meeting.started_at).total_seconds()
+            duration_minutes = round(duration_seconds / 60)  # 분 단위 변환 (반올림)
+            meeting.duration = duration_minutes
+    else:
+        meeting.duration = 0  # started_at이 없으면 0
+
+    db.commit()
+
+    return
+
+@app.post("/api/v1/endtest")
+async def end_meeting(
+    file: UploadFile = File(...),
+    meeting_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+
+    global file_counter
+
+    # 1. 예시 디렉토리 순환
+    selected_dir = example_dirs[file_counter]
+    file_counter = (file_counter + 1) % len(example_dirs)
+
+    script_path = os.path.join(selected_dir, "script.txt")
+    summary_path = os.path.join(selected_dir, "summary.txt")
+
+    print(f"[ENDTEST] 선택된 예시 디렉토리: {selected_dir}")
+    print(f"[ENDTEST] 스크립트 경로: {script_path}")
+    print(f"[ENDTEST] 요약문 경로: {summary_path}")
+
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            script_text = f.read()
+        with open(summary_path, "r", encoding="utf-8") as f:
+            summary_text = f.read()
+    except Exception as e:
+        return {"error": f"예시 파일 읽기 실패: {e}"}
+
+    # 파일 저장 (MP3)
+    file_path, output_dir = save_file_and_dirs(file, meeting_id)
+
+    # userMeetings 테이블에서 meeting_id에 해당하는 user_id 조회
+    user_ids = db.query(UserMeeting.user_id).filter(UserMeeting.meeting_id == meeting_id).all()
+    user_ids = [user_id[0] for user_id in user_ids]
+
+    # users 테이블에서 nickname 조회하여 members 필드에 저장
+    nicknames = db.query(User.nickname).filter(User.user_id.in_(user_ids)).all()
+    members = ", ".join([nickname[0] for nickname in nicknames])
+
+    # meetings 테이블에서 team_id 조회
+    meeting = db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
+    if not meeting:
+        return {"error": "Meeting not found"}
+
+    team_id = meeting.team_id  # team_id 값 저장
+
+
+    # 현재 날짜 (YYYY-MM-DD 형식)
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    # note 테이블에 데이터 추가 (team_id 포함)
+    new_note = Note(
+        created_at=func.now(),
+        updated_at=func.now(),
+        members=members,
+        audio_url=file_path,
+        script=script_text,
+        summary=summary_text,
         title=current_date,
         meeting_id=meeting_id,
         team_id=team_id  # team_id 추가
